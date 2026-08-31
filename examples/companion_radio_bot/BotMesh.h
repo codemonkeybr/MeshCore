@@ -13,6 +13,8 @@
 //
 // The message hooks call their MyMesh base first (so a connected phone app
 // still sees all traffic), then feed a normalised BotMsg to the CommandRouter.
+// Replies are queued and actually transmitted from loop(), never from inside
+// the RX callback.
 class BotMesh : public MyMesh {
 public:
   BotMesh(mesh::Radio& radio, mesh::RNG& rng, mesh::RTCClock& rtc,
@@ -22,20 +24,19 @@ public:
   void begin(bool has_display);     // hides MyMesh::begin (non-virtual)
   void loop();                      // hides MyMesh::loop
 
-  // Send `text` back to the origin of `msg` (its channel, or the sender as a
-  // DM). Rate-limit buckets have already been consumed by the dispatcher.
+  // Queue `text` to be sent back to the origin of `msg` from the next loop().
   void botReply(const BotMsg& msg, const char* text);
 
   CommandRouter& router() { return _router; }
   BotStore& store() { return _store; }
 
-  // --- helpers for commands ------------------------------------------------
   uint32_t uptimeSecs() const { return (millis() - _boot_ms) / 1000; }
   uint32_t nowEpoch() { return getRTCClock()->getCurrentTime(); }
+  static const char* lastResetReason();   // nullptr if a clean boot
   bool selfLocation(double& lat, double& lon);
   bool senderLocation(const BotMsg& msg, double& lat, double& lon);
 
-  struct Stats { uint32_t msgs, matched, replies, dropped_rate, dropped_gap, send_fail; } stats{};
+  struct Stats { uint32_t msgs, matched, replies, dropped_rate, dropped_gap, dropped_full, send_fail; } stats{};
 
 protected:
   void onChannelMessageRecv(const mesh::GroupChannel& channel, mesh::Packet* pkt,
@@ -49,6 +50,7 @@ private:
   bool gate(const BotMsg& msg, const uint8_t rl_key[4]);
   bool channelAllowed(uint8_t channel_idx);
   void handle(const BotMsg& msg, const uint8_t rl_key[4]);
+  void drainOutQueue();
 
   CommandRouter _router;
   RateLimiter _rl;

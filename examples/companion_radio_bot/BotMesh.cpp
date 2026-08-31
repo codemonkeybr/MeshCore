@@ -4,34 +4,84 @@
 #include "GeoUtil.h"
 #include "commands/Command.h"
 #include <string.h>
+#include <esp_system.h>
+#include <esp_task_wdt.h>
 
 #ifndef BOT_ENABLED
 #define BOT_ENABLED 1
 #endif
+#ifndef BOT_OUTQ_SIZE
+#define BOT_OUTQ_SIZE 4
+#endif
 
+// Deferred reply queue — file-static so it does not sit inside the_mesh, and so
+// sends never happen from within the mesh RX callback.
+struct PendingReply {
+  bool     used = false;
+  bool     is_channel = false;
+  uint8_t  channel_idx = 0xFF;
+  uint8_t  to_pubkey[6] = {0};
+  char     text[BOT_MAX_REPLY_LEN + 1] = {0};
+};
+static PendingReply s_outq[BOT_OUTQ_SIZE];
 static unsigned long s_last_tx_ms = 0;
+
+static const char* reset_reason_str(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_PANIC:    return "PANIC";
+    case ESP_RST_INT_WDT:  return "INT_WDT";
+    case ESP_RST_TASK_WDT: return "TASK_WDT";
+    case ESP_RST_WDT:      return "WDT";
+    case ESP_RST_BROWNOUT: return "BROWNOUT";
+    default:               return nullptr;   // POWERON / SW / etc. -> not noteworthy
+  }
+}
+
+static esp_reset_reason_t s_reset = ESP_RST_UNKNOWN;
+static bool s_crash_announced = false;
 
 void BotMesh::begin(bool has_display) {
   MyMesh::begin(has_display);
   _boot_ms = millis();
 #if BOT_ENABLED
-  BOT_DEBUG_PRINTLN("bot begin: router..."); Serial.flush();
+  s_reset = esp_reset_reason();
+  s_crash_announced = (reset_reason_str(s_reset) == nullptr);
   _router.begin();
-  BOT_DEBUG_PRINTLN("bot begin: rl..."); Serial.flush();
   _rl.begin();
-  BOT_DEBUG_PRINTLN("bot begin: store..."); Serial.flush();
   _store.begin();
-  BOT_DEBUG_PRINTLN("BotMesh ready as '%s' (%d cmds, %d cached nodes)",
-                    getNodeName(), _router.count(), _store.count());
-  Serial.flush();
+  for (auto& e : s_outq) e.used = false;
+  BOT_DEBUG_PRINTLN("BotMesh ready as '%s' (%d cmds, %d cached nodes, reset=%d)",
+                    getNodeName(), _router.count(), _store.count(), (int)s_reset);
 #else
   BOT_DEBUG_PRINTLN("BotMesh compiled but BOT_ENABLED=0");
 #endif
 }
 
+const char* BotMesh::lastResetReason() { return reset_reason_str(s_reset); }
+
 void BotMesh::loop() {
   MyMesh::loop();
 #if BOT_ENABLED
+  // Once the mesh has settled, announce a recovery from a crash so it's visible
+  // on the mesh even without a serial console.
+  if (!s_crash_announced && uptimeSecs() >= 15) {
+    s_crash_announced = true;
+    for (int i = 0; i < 40; i++) {
+      ChannelDetails ch;
+      if (getChannel(i, ch) && ch.name[0]) {
+        for (auto& e : s_outq) {
+          if (e.used) continue;
+          e.is_channel = true; e.channel_idx = (uint8_t)i;
+          snprintf(e.text, sizeof(e.text), "%s recovered (%s)", getNodeName(),
+                   reset_reason_str(s_reset));
+          e.used = true;
+          break;
+        }
+        break;
+      }
+    }
+  }
+  drainOutQueue();
   _store.loop(nowEpoch());
 #endif
 }
@@ -176,42 +226,53 @@ void BotMesh::onMessageRecv(const ContactInfo& from, mesh::Packet* pkt,
 #endif
 }
 
-// ---- reply -----------------------------------------------------
+// ---- reply: queue now, send from loop() -------------------------------
 
 void BotMesh::botReply(const BotMsg& msg, const char* text) {
   if (!text || !*text) return;
 
-  unsigned long now = millis();
-  if (s_last_tx_ms != 0 && (now - s_last_tx_ms) < BOT_MIN_TX_GAP_MS) {
-    stats.dropped_gap++;
-    BOT_DEBUG_PRINTLN("reply dropped (min tx gap): '%s'", text);
+  for (auto& e : s_outq) {
+    if (e.used) continue;
+    e.is_channel = msg.is_channel;
+    e.channel_idx = msg.channel_idx;
+    memset(e.to_pubkey, 0, sizeof(e.to_pubkey));
+    if (!msg.is_channel && msg.contact) memcpy(e.to_pubkey, msg.contact->id.pub_key, 6);
+    strncpy(e.text, text, BOT_MAX_REPLY_LEN);
+    e.text[BOT_MAX_REPLY_LEN] = '\0';
+    e.used = true;
     return;
   }
+  stats.dropped_full++;
+  BOT_DEBUG_PRINTLN("reply dropped (outq full): '%s'", text);
+}
 
-  char buf[BOT_MAX_REPLY_LEN + 1];
-  strncpy(buf, text, BOT_MAX_REPLY_LEN);
-  buf[BOT_MAX_REPLY_LEN] = '\0';
+void BotMesh::drainOutQueue() {
+  unsigned long now = millis();
+  if (s_last_tx_ms != 0 && (now - s_last_tx_ms) < BOT_MIN_TX_GAP_MS) return;
 
-  bool sent = false;
-  if (msg.is_channel) {
-    ChannelDetails ch;
-    if (getChannel(msg.channel_idx, ch)) {
-      sent = sendGroupMessage(getRTCClock()->getCurrentTimeUnique(), ch.channel,
-                              getNodeName(), buf, (int)strlen(buf));
+  for (auto& e : s_outq) {
+    if (!e.used) continue;
+
+    bool sent = false;
+    if (e.is_channel) {
+      ChannelDetails ch;
+      if (getChannel(e.channel_idx, ch)) {
+        sent = sendGroupMessage(getRTCClock()->getCurrentTimeUnique(), ch.channel,
+                                getNodeName(), e.text, (int)strlen(e.text));
+      }
+    } else {
+      ContactInfo* c = lookupContactByPubKey(e.to_pubkey, 6);
+      if (c) {
+        uint32_t ack = 0, tmo = 0;
+        int r = sendMessage(*c, getRTCClock()->getCurrentTimeUnique(), 0, e.text, ack, tmo);
+        sent = (r != MSG_SEND_FAILED);
+      }
     }
-  } else if (msg.contact) {
-    uint32_t expected_ack = 0, est_timeout = 0;
-    int r = sendMessage(*msg.contact, getRTCClock()->getCurrentTimeUnique(), 0,
-                        buf, expected_ack, est_timeout);
-    sent = (r != MSG_SEND_FAILED);
-  }
 
-  if (sent) {
-    s_last_tx_ms = now;
-    stats.replies++;
-    BOT_DEBUG_PRINTLN("reply (%s): '%s'", msg.is_channel ? "ch" : "dm", buf);
-  } else {
-    stats.send_fail++;
-    BOT_DEBUG_PRINTLN("reply FAILED (%s): '%s'", msg.is_channel ? "ch" : "dm", buf);
+    if (sent) { stats.replies++; s_last_tx_ms = now; BOT_DEBUG_PRINTLN("tx (%s): '%s'", e.is_channel ? "ch" : "dm", e.text); }
+    else      { stats.send_fail++; BOT_DEBUG_PRINTLN("tx FAILED (%s): '%s'", e.is_channel ? "ch" : "dm", e.text); }
+
+    e.used = false;
+    return;   // one send per loop pass
   }
 }

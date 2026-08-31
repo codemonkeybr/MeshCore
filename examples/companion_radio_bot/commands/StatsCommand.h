@@ -18,15 +18,18 @@ public:
   void run(BotMesh& mesh, const BotMsg& msg) override {
     uint32_t up = mesh.uptimeSecs();
     const BotMesh::Stats& s = mesh.stats;
+    const char* rst = BotMesh::lastResetReason();
     char out[BOT_MAX_REPLY_LEN + 1];
     snprintf(out, sizeof(out),
-             "up %lud%luh%lum | heap %uk | msg %lu match %lu reply %lu drop %lu/%lu fail %lu | nodes %d",
+             "up %lud%luh%lum | heap %uk | msg %lu match %lu reply %lu drop %lu/%lu/%lu fail %lu | nodes %d%s%s",
              (unsigned long)(up / 86400), (unsigned long)((up % 86400) / 3600),
              (unsigned long)((up % 3600) / 60),
              (unsigned)(ESP.getFreeHeap() / 1024),
              (unsigned long)s.msgs, (unsigned long)s.matched, (unsigned long)s.replies,
              (unsigned long)s.dropped_rate, (unsigned long)s.dropped_gap,
-             (unsigned long)s.send_fail, mesh.store().count());
+             (unsigned long)s.dropped_full,
+             (unsigned long)s.send_fail, mesh.store().count(),
+             rst ? " | reset=" : "", rst ? rst : "");
     mesh.botReply(msg, out);
   }
 };
