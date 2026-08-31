@@ -5,15 +5,15 @@
 class BotMesh;
 class Command;
 
-// Compile-time registry + dispatcher for bot commands. The command table is
-// fixed at build time (see CommandRouter.cpp); there is no dynamic plugin
-// loading on-device.
+// Compile-time registry + matcher for bot commands. The command table is fixed
+// at build time (see CommandRouter.cpp); there is no dynamic plugin loading.
 class CommandRouter {
 public:
   void begin();
 
-  // Try to handle `msg`. Returns true if a command matched and ran.
-  bool dispatch(BotMesh& mesh, const BotMsg& msg);
+  // Return the first command whose matches() accepts `msg`, or nullptr.
+  // Does not execute — the caller applies rate limiting, then calls run().
+  Command* match(const BotMsg& msg) const;
 
   int count() const { return _count; }
   Command* at(int i) const { return (i >= 0 && i < _count) ? _cmds[i] : nullptr; }

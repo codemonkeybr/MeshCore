@@ -1,10 +1,7 @@
 #include "Command.h"
+#include "../BotConfig.h"
 #include <string.h>
 #include <ctype.h>
-
-#ifndef BOT_CMD_PREFIX
-#define BOT_CMD_PREFIX ""   // e.g. "!" — empty means bare keywords
-#endif
 
 static const char* skip_ws(const char* p) {
   while (*p == ' ' || *p == '\t') p++;
@@ -18,18 +15,17 @@ static const char* skip_prefix(const char* p) {
   return p;
 }
 
-bool Command::matches(const BotMsg& msg) const {
+bool Command::matchesKeyword(const BotMsg& msg, const char* kw) {
   if (!msg.text) return false;
   const char* p = skip_prefix(skip_ws(msg.text));
 
-  const char* kw = keyword();
   const size_t kwlen = strlen(kw);
   for (size_t i = 0; i < kwlen; i++) {
-    if (tolower((unsigned char)p[i]) != (unsigned char)kw[i]) return false;
+    if (tolower((unsigned char)p[i]) != tolower((unsigned char)kw[i])) return false;
   }
-  // keyword must be followed by end-of-string or whitespace
   const char after = p[kwlen];
-  return after == '\0' || after == ' ' || after == '\t' || after == '\n' || after == '\r';
+  return after == '\0' || after == ' ' || after == '\t' ||
+         after == '\n' || after == '\r';
 }
 
 size_t Command::args(const BotMsg& msg, char* out, size_t out_sz) {
@@ -42,7 +38,6 @@ size_t Command::args(const BotMsg& msg, char* out, size_t out_sz) {
 
   size_t n = 0;
   while (*p && n < out_sz - 1) out[n++] = *p++;
-  // right-trim
   while (n && (out[n - 1] == ' ' || out[n - 1] == '\t' ||
                out[n - 1] == '\n' || out[n - 1] == '\r')) n--;
   out[n] = '\0';

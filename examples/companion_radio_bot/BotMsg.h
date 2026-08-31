@@ -6,9 +6,13 @@
 
 // A normalised view of an inbound mesh message handed to the command router.
 // Populated by BotMesh from the onChannelMessageRecv / onMessageRecv hooks.
+//
+// For channel messages the on-wire text is "<sender>: <body>"; BotMesh splits
+// it so `text` is the body alone and `sender_name` is the "<sender>" part.
 struct BotMsg {
   bool is_channel = false;               // true = group channel, false = direct message
-  const char* text = nullptr;            // message body (NUL-terminated, owned by caller)
+  const char* text = nullptr;            // message body (sender prefix stripped for channels)
+  const char* sender_name = nullptr;     // display name of the sender
   uint32_t sender_timestamp = 0;         // by the sender's clock
 
   // Direct-message context (is_channel == false)

@@ -23,14 +23,36 @@ Both are upstream-friendly and could be PR'd.
 
 ```
 BotMesh.{h,cpp}       MyMesh subclass: hooks onChannelMessageRecv / onMessageRecv,
-                      calls base then feeds the CommandRouter; botReply() sender.
-CommandRouter.{h,cpp} Compile-time command table + dispatcher (no dynamic plugins).
-BotMsg.h              Normalised inbound message handed to commands.
+                      calls base first, splits "<sender>: <body>" for channels,
+                      loop guard (ignores own name), gate() = channel allow-list
+                      + rate limiter, then runs the matched command. botReply()
+                      sends over the mesh (channel or DM).
+CommandRouter.{h,cpp} Compile-time command table + match() (no dynamic plugins).
+RateLimiter.{h,cpp}   Token buckets: global / per-channel / per-sender. A reply
+                      needs a token in all three; keyFromName() hashes channel
+                      senders (DMs key on pubkey prefix).
+BotConfig.h           All compile-time knobs (rates, allow-list, prefix, version).
+BotMsg.h              Normalised inbound message (carries routing path).
 BotDebug.h            `BOT_DEBUG_PRINTLN`, gated on -D BOT_DEBUG=1.
 commands/
-  Command.{h,cpp}     Base class + keyword matching / arg parsing.
-  PingCommand.h       Round-trip test command.
+  Command.{h,cpp}     Base class: matchesKeyword() + args() parsing.
+  PingCommand.h       ping -> pong
+  VersionCommand.h    version -> bot/firmware version + uptime
+  TestCommand.h       test / t -> SNR + hop count
+  HelloCommand.h      hello / hi / hey
+  DiceCommand.h       dice [NdM(+K)]
+  RollCommand.h       roll [N]
+  Magic8Command.h     magic8 / 8ball
+  CmdCommand.h        cmd -> keyword list
+  HelpCommand.h       help [cmd]
 ```
+
+## Identity
+
+The build sets `-D ADVERT_NAME='"D4rl3k"'`. On a device with an existing
+identity file the name change applies but the **keypair is kept**. For a clean
+throwaway identity, `esptool erase-flash` before the first upload — first boot
+then generates a new keypair and adopts the name.
 
 ## Build
 
@@ -43,6 +65,9 @@ pio device monitor -b 115200      # "Bot: ..." debug lines
 
 ## Status
 
-Phase 1 spike. `ping` round-trips; coarse single inter-reply gap only. Not yet:
-multi-class rate limiter, channel allow-list, persistent repeater/location cache,
-`path` with distance. See the project plan for the phase breakdown.
+Phase 1: command router, multi-class rate limiter, channel allow-list, loop
+guard, and the basic command set (above) are in. Replies are still single mesh
+packets (`BOT_MAX_REPLY_LEN`) with an absolute min-TX-gap drop.
+
+Not yet: deferred/chunked TX queue, persistent repeater/location cache, `path`
+with distance, almanac, internet commands, web config. See the project plan.

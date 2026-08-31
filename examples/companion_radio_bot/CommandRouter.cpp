@@ -2,13 +2,32 @@
 #include "BotDebug.h"
 #include "commands/Command.h"
 #include "commands/PingCommand.h"
+#include "commands/VersionCommand.h"
+#include "commands/DiceCommand.h"
+#include "commands/RollCommand.h"
+#include "commands/HelloCommand.h"
+#include "commands/Magic8Command.h"
+#include "commands/TestCommand.h"
+#include "commands/CmdCommand.h"
+#include "commands/HelpCommand.h"
 
 // ---- Compile-time command table -------------------------------------------
-// Add new commands here. Order is match priority (first match wins).
-static PingCommand s_ping;
+// Order is match priority (first match wins). help/cmd introspect the table, so
+// they see every command listed here.
+static PingCommand    s_ping;
+static VersionCommand s_version;
+static TestCommand    s_test;
+static HelloCommand   s_hello;
+static DiceCommand    s_dice;
+static RollCommand    s_roll;
+static Magic8Command  s_magic8;
+static CmdCommand     s_cmd;
+static HelpCommand    s_help;
 
 static Command* const kCommands[] = {
-  &s_ping,
+  &s_ping, &s_version, &s_test, &s_hello,
+  &s_dice, &s_roll, &s_magic8,
+  &s_cmd, &s_help,
 };
 // --------------------------------------------------------------------------
 
@@ -20,14 +39,9 @@ void CommandRouter::begin() {
   BOT_DEBUG_PRINTLN("router: %d command(s) registered", _count);
 }
 
-bool CommandRouter::dispatch(BotMesh& mesh, const BotMsg& msg) {
+Command* CommandRouter::match(const BotMsg& msg) const {
   for (int i = 0; i < _count; i++) {
-    if (_cmds[i]->matches(msg)) {
-      BOT_DEBUG_PRINTLN("dispatch: '%s' (%s)", _cmds[i]->keyword(),
-                        msg.is_channel ? "channel" : "dm");
-      _cmds[i]->run(mesh, msg);
-      return true;
-    }
+    if (_cmds[i]->matches(msg)) return _cmds[i];
   }
-  return false;
+  return nullptr;
 }
