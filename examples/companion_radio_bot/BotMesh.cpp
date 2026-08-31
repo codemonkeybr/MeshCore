@@ -15,11 +15,15 @@ void BotMesh::begin(bool has_display) {
   MyMesh::begin(has_display);
   _boot_ms = millis();
 #if BOT_ENABLED
+  BOT_DEBUG_PRINTLN("bot begin: router..."); Serial.flush();
   _router.begin();
+  BOT_DEBUG_PRINTLN("bot begin: rl..."); Serial.flush();
   _rl.begin();
+  BOT_DEBUG_PRINTLN("bot begin: store..."); Serial.flush();
   _store.begin();
   BOT_DEBUG_PRINTLN("BotMesh ready as '%s' (%d cmds, %d cached nodes)",
                     getNodeName(), _router.count(), _store.count());
+  Serial.flush();
 #else
   BOT_DEBUG_PRINTLN("BotMesh compiled but BOT_ENABLED=0");
 #endif

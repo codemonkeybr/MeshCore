@@ -5,26 +5,38 @@
 #include <string.h>
 
 #define CACHE_PATH "/botcache.bin"
-#define CACHE_MAGIC 0x42430002u    // "BC" v2
+#define CACHE_MAGIC 0x42430003u    // "BC" v3
+
+// Record table — file-static so it does not bloat the `the_mesh` global.
+static NodeRec s_recs[BOT_LOCCACHE_MAX];
+static int     s_count = 0;
+
+int BotStore::count() const { return s_count; }
 
 void BotStore::begin() {
-  _count = 0;
-  memset(_recs, 0, sizeof(_recs));
-
-  File f = SPIFFS.open(CACHE_PATH, "r");
-  if (f) {
-    uint32_t magic = 0;
-    uint16_t n = 0;
-    if (f.read((uint8_t*)&magic, 4) == 4 && magic == CACHE_MAGIC &&
-        f.read((uint8_t*)&n, 2) == 2) {
-      if (n > BOT_LOCCACHE_MAX) n = BOT_LOCCACHE_MAX;
-      int got = f.read((uint8_t*)_recs, (size_t)n * sizeof(NodeRec));
-      if (got == (int)((size_t)n * sizeof(NodeRec))) _count = n;
-    }
-    f.close();
-  }
-  BOT_DEBUG_PRINTLN("store: loaded %d cached nodes", _count);
+  s_count = 0;
+  memset(s_recs, 0, sizeof(s_recs));
+  _dirty = false;
   _next_flush_ms = millis() + (uint32_t)BOT_LOCCACHE_FLUSH_SEC * 1000;
+
+  if (!SPIFFS.exists(CACHE_PATH)) {
+    BOT_DEBUG_PRINTLN("store: no cache file yet");
+    return;
+  }
+  File f = SPIFFS.open(CACHE_PATH, "r");
+  if (!f || f.isDirectory()) { BOT_DEBUG_PRINTLN("store: cache open failed"); return; }
+
+  uint32_t magic = 0;
+  uint16_t n = 0;
+  bool ok = (f.read((uint8_t*)&magic, 4) == 4) && magic == CACHE_MAGIC &&
+            (f.read((uint8_t*)&n, 2) == 2);
+  if (ok) {
+    if (n > BOT_LOCCACHE_MAX) n = BOT_LOCCACHE_MAX;
+    size_t want = (size_t)n * sizeof(NodeRec);
+    if (f.read((uint8_t*)s_recs, want) == (int)want) s_count = n;
+  }
+  f.close();
+  BOT_DEBUG_PRINTLN("store: loaded %d cached nodes", s_count);
 }
 
 void BotStore::flush() {
@@ -32,13 +44,13 @@ void BotStore::flush() {
   File f = SPIFFS.open(CACHE_PATH, "w");
   if (!f) { BOT_DEBUG_PRINTLN("store: flush open failed"); return; }
   uint32_t magic = CACHE_MAGIC;
-  uint16_t n = (uint16_t)_count;
+  uint16_t n = (uint16_t)s_count;
   f.write((const uint8_t*)&magic, 4);
   f.write((const uint8_t*)&n, 2);
-  f.write((const uint8_t*)_recs, (size_t)n * sizeof(NodeRec));
+  f.write((const uint8_t*)s_recs, (size_t)n * sizeof(NodeRec));
   f.close();
   _dirty = false;
-  BOT_DEBUG_PRINTLN("store: flushed %d nodes", _count);
+  BOT_DEBUG_PRINTLN("store: flushed %d nodes", s_count);
 }
 
 void BotStore::loop(uint32_t /*now_epoch*/) {
@@ -48,15 +60,15 @@ void BotStore::loop(uint32_t /*now_epoch*/) {
   }
 }
 
-NodeRec* BotStore::slotFor(const uint8_t pubkey[6]) {
+static NodeRec* slotFor(const uint8_t pubkey[6]) {
   int lru = -1;
   uint32_t lru_ts = 0xFFFFFFFFu;
-  for (int i = 0; i < _count; i++) {
-    if (_recs[i].used && memcmp(_recs[i].pubkey, pubkey, 6) == 0) return &_recs[i];
-    if (_recs[i].used && _recs[i].last_advert < lru_ts) { lru_ts = _recs[i].last_advert; lru = i; }
+  for (int i = 0; i < s_count; i++) {
+    if (s_recs[i].used && memcmp(s_recs[i].pubkey, pubkey, 6) == 0) return &s_recs[i];
+    if (s_recs[i].used && s_recs[i].last_advert < lru_ts) { lru_ts = s_recs[i].last_advert; lru = i; }
   }
-  if (_count < BOT_LOCCACHE_MAX) return &_recs[_count++];
-  return (lru >= 0) ? &_recs[lru] : &_recs[0];   // evict oldest
+  if (s_count < BOT_LOCCACHE_MAX) return &s_recs[s_count++];
+  return (lru >= 0) ? &s_recs[lru] : &s_recs[0];
 }
 
 void BotStore::noteNode(const uint8_t pubkey[], const char* name, uint8_t type,
@@ -77,8 +89,8 @@ int BotStore::findByHash(const uint8_t* hash, uint8_t hash_len,
   if (hash_len < 1) hash_len = 1;
   if (hash_len > 6) hash_len = 6;
   int n = 0;
-  for (int i = 0; i < _count && n < max_out; i++) {
-    if (_recs[i].used && memcmp(_recs[i].pubkey, hash, hash_len) == 0) out[n++] = &_recs[i];
+  for (int i = 0; i < s_count && n < max_out; i++) {
+    if (s_recs[i].used && memcmp(s_recs[i].pubkey, hash, hash_len) == 0) out[n++] = &s_recs[i];
   }
   return n;
 }
@@ -86,32 +98,28 @@ int BotStore::findByHash(const uint8_t* hash, uint8_t hash_len,
 const NodeRec* BotStore::findByName(const char* name) const {
   if (!name || !*name) return nullptr;
   const NodeRec* best = nullptr;
-  for (int i = 0; i < _count; i++) {
-    if (_recs[i].used && strcmp(_recs[i].name, name) == 0) {
-      if (!best || _recs[i].last_advert > best->last_advert) best = &_recs[i];
+  for (int i = 0; i < s_count; i++) {
+    if (s_recs[i].used && strcmp(s_recs[i].name, name) == 0) {
+      if (!best || s_recs[i].last_advert > best->last_advert) best = &s_recs[i];
     }
   }
   return best;
 }
 
-// ---- leaderboard ---------------------------------------------------------
+// ---- leaderboard --------------------------------------------------------
 
 static uint32_t week_of(uint32_t epoch) { return epoch / 604800u; }
 
 void BotStore::recordDistance(const char* who, float km, uint32_t now_epoch) {
   Preferences p;
   if (!p.begin("botlb", false)) return;
-
-  float at_km = p.getFloat("at_km", 0.0f);
-  if (km > at_km) {
+  if (km > p.getFloat("at_km", 0.0f)) {
     p.putFloat("at_km", km);
     p.putString("at_who", who ? who : "?");
   }
-
   uint32_t wk = week_of(now_epoch);
-  uint32_t stored_wk = p.getUInt("wk", 0);
   float wk_km = p.getFloat("wk_km", 0.0f);
-  if (wk != stored_wk) { wk_km = 0.0f; p.putUInt("wk", wk); }
+  if (wk != p.getUInt("wk", 0)) { wk_km = 0.0f; p.putUInt("wk", wk); }
   if (km > wk_km) {
     p.putFloat("wk_km", km);
     p.putString("wk_who", who ? who : "?");
