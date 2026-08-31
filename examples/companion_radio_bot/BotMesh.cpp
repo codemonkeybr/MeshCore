@@ -3,7 +3,9 @@
 #include "BotDebug.h"
 #include "GeoUtil.h"
 #include "HttpWorker.h"
+#include "BotWebUI.h"
 #include "commands/Command.h"
+#include <WiFi.h>
 #include <string.h>
 #include <esp_system.h>
 
@@ -74,6 +76,8 @@ void BotMesh::loop() {
       }
     }
   }
+
+  if (!BotWebUI::started() && WiFi.status() == WL_CONNECTED) BotWebUI::begin();
 
   HttpResult hr;
   while (HttpWorker::instance().pollResult(hr)) enqueueReply(hr.target, hr.text);
