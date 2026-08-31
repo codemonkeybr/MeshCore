@@ -12,6 +12,8 @@
 #include "commands/PrefixCommand.h"
 #include "commands/LeaderboardCommand.h"
 #include "commands/StatsCommand.h"
+#include "commands/SunCommand.h"
+#include "commands/MoonCommand.h"
 #include "commands/CmdCommand.h"
 #include "commands/HelpCommand.h"
 
@@ -24,6 +26,8 @@ static PathCommand        s_path;
 static PrefixCommand      s_prefix;
 static LeaderboardCommand s_leaderboard;
 static StatsCommand       s_stats;
+static SunCommand         s_sun;
+static MoonCommand        s_moon;
 static HelloCommand       s_hello;
 static DiceCommand        s_dice;
 static RollCommand        s_roll;
@@ -34,6 +38,7 @@ static HelpCommand        s_help;
 static Command* const kCommands[] = {
   &s_ping, &s_version, &s_test,
   &s_path, &s_prefix, &s_leaderboard, &s_stats,
+  &s_sun, &s_moon,
   &s_hello, &s_dice, &s_roll, &s_magic8,
   &s_cmd, &s_help,
 };
