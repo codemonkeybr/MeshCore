@@ -1,5 +1,19 @@
 # Dev notes — companion_radio_bot
 
+## ⚠️ Always clean-build after changing a bot header
+
+`the_mesh` is defined in `examples/companion_radio/main.cpp`, which pulls in
+`BotMesh.h` through a **macro** (`#include MESH_CLASS_HEADER`). PlatformIO's
+dependency scanner does not follow macro includes, so `main.cpp.o` is **not**
+rebuilt when a bot header changes — and it keeps sizing the `the_mesh` global
+off a stale `sizeof(BotMesh)`. If the real object is larger, writes to its last
+members run past the allocation and corrupt whatever symbol follows (crash on
+every inbound message, boot loops, TCB asserts).
+
+Until a forced-dependency script is added: **`pio run -t clean` before every
+build** while iterating on bot headers. An incremental build is only safe when
+you touched `.cpp` files only.
+
 ## Flashing (Heltec V4, ESP32-S3 native USB)
 
 Opening `/dev/ttyACM0` from a Linux host toggles DTR/RTS, which the S3
