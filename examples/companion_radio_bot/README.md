@@ -65,9 +65,15 @@ pio device monitor -b 115200      # "Bot: ..." debug lines
 
 ## Status
 
-Phase 1: command router, multi-class rate limiter, channel allow-list, loop
-guard, and the basic command set (above) are in. Replies are still single mesh
-packets (`BOT_MAX_REPLY_LEN`) with an absolute min-TX-gap drop.
+Phase 1 + 2:
+- Command router, multi-class rate limiter, channel allow-list, loop guard.
+- `BotStore`: persistent node/location cache (`onDiscoveredContact` -> RAM array,
+  flushed to `/botcache.bin` on SPIFFS) that outlives the 350-contact companion
+  table + eviction. Leaderboard records in NVS.
+- `PathDistance`: hop-hash -> cached node, recency+geo disambiguation, haversine
+  sum sender -> hops -> self.
+- Commands: ping version test/t **path/p/decode/route** **prefix** **leaderboard/lb**
+  **stats/status** hello dice roll magic8 cmd help.
 
-Not yet: deferred/chunked TX queue, persistent repeater/location cache, `path`
-with distance, almanac, internet commands, web config. See the project plan.
+Not yet: deferred/chunked TX queue, trace/tracer/multitest/neighbors, almanac,
+internet commands, web config, serial-observability fix. See the project plan.

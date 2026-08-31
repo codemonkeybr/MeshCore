@@ -22,9 +22,11 @@ struct BotMsg {
   const mesh::GroupChannel* channel = nullptr;
   uint8_t channel_idx = 0xFF;
 
-  // Routing: path_len == 0xFF means the packet arrived direct (not flood).
-  // path points at up to path_len 1-byte hop hashes (valid only for flood).
-  uint8_t path_len = 0xFF;
+  // Routing. `is_flood` false => heard direct (0 hops). When true, `path` points
+  // at path_hops * path_hash_len bytes of hop hashes (hash = pubkey prefix).
+  bool is_flood = false;
+  uint8_t path_hash_len = 1;
+  uint8_t path_hops = 0;
   const uint8_t* path = nullptr;
 
   float snr = 0.0f;

@@ -15,11 +15,11 @@ public:
 
   void run(BotMesh& mesh, const BotMsg& msg) override {
     char out[BOT_MAX_REPLY_LEN + 1];
-    if (msg.path_len == 0xFF) {
+    if (!msg.is_flood) {
       snprintf(out, sizeof(out), "test ok! SNR %.1f, direct (0 hops)", msg.snr);
     } else {
       snprintf(out, sizeof(out), "test ok! SNR %.1f, %u hop%s",
-               msg.snr, msg.path_len, msg.path_len == 1 ? "" : "s");
+               msg.snr, msg.path_hops, msg.path_hops == 1 ? "" : "s");
     }
     mesh.botReply(msg, out);
   }

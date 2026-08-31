@@ -19,6 +19,23 @@
 #ifndef BOT_MAX_REPLY_LEN
 #define BOT_MAX_REPLY_LEN 140    // single mesh text packet for now (Phase 2 chunks)
 #endif
+#ifndef BOT_MIN_TX_GAP_MS
+#define BOT_MIN_TX_GAP_MS 900    // absolute floor between two bot transmits
+#endif
+
+// --- location cache (BotStore) ---------------------------------------
+#ifndef BOT_LOCCACHE_MAX
+#define BOT_LOCCACHE_MAX 400     // ~36 B/entry in RAM; persisted to SPIFFS
+#endif
+#ifndef BOT_LOCCACHE_FLUSH_SEC
+#define BOT_LOCCACHE_FLUSH_SEC 120
+#endif
+#ifndef BOT_PATH_MAX_HOP_KM
+#define BOT_PATH_MAX_HOP_KM 180  // geo-plausibility limit for disambiguating a hop
+#endif
+#ifndef BOT_PATH_SHOW_DISTANCE
+#define BOT_PATH_SHOW_DISTANCE 1
+#endif
 
 // --- rate limiting (token buckets) --------------------------------------
 // A reply is sent only if the global, per-channel AND per-sender buckets all
@@ -36,10 +53,10 @@
 #define BOT_RL_CHANNEL_BURST   2
 #endif
 #ifndef BOT_RL_SENDER_PER_MIN
-#define BOT_RL_SENDER_PER_MIN  2       // per sender (pubkey for DM, name-hash for channel)
+#define BOT_RL_SENDER_PER_MIN  4       // per sender (pubkey for DM, name-hash for channel)
 #endif
 #ifndef BOT_RL_SENDER_BURST
-#define BOT_RL_SENDER_BURST    2
+#define BOT_RL_SENDER_BURST    3
 #endif
 #ifndef BOT_RL_SENDER_SLOTS
 #define BOT_RL_SENDER_SLOTS    16      // tracked senders (LRU)

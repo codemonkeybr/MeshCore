@@ -3,6 +3,7 @@
 #include "MyMesh.h"
 #include "CommandRouter.h"
 #include "RateLimiter.h"
+#include "BotStore.h"
 #include "BotMsg.h"
 
 // BotMesh extends the stock companion-radio MyMesh with an on-device command
@@ -18,38 +19,41 @@ public:
           SimpleMeshTables& tables, DataStore& store, AbstractUITask* ui = nullptr)
     : MyMesh(radio, rng, rtc, tables, store, ui) {}
 
-  // Hides MyMesh::begin (non-virtual). Called on the concrete BotMesh object
-  // from main.cpp, so the correct overload is selected.
-  void begin(bool has_display);
+  void begin(bool has_display);     // hides MyMesh::begin (non-virtual)
+  void loop();                      // hides MyMesh::loop
 
   // Send `text` back to the origin of `msg` (its channel, or the sender as a
   // DM). Rate-limit buckets have already been consumed by the dispatcher.
   void botReply(const BotMsg& msg, const char* text);
 
   CommandRouter& router() { return _router; }
+  BotStore& store() { return _store; }
 
   // --- helpers for commands ------------------------------------------------
   uint32_t uptimeSecs() const { return (millis() - _boot_ms) / 1000; }
-  uint32_t botMsgCount() const { return _msg_count; }
-  uint32_t botReplyCount() const { return _reply_count; }
+  uint32_t nowEpoch() { return getRTCClock()->getCurrentTime(); }
+  bool selfLocation(double& lat, double& lon);
+  bool senderLocation(const BotMsg& msg, double& lat, double& lon);
+
+  struct Stats { uint32_t msgs, matched, replies, dropped_rate, dropped_gap, send_fail; } stats{};
 
 protected:
   void onChannelMessageRecv(const mesh::GroupChannel& channel, mesh::Packet* pkt,
                             uint32_t timestamp, const char* text) override;
   void onMessageRecv(const ContactInfo& from, mesh::Packet* pkt,
                      uint32_t sender_timestamp, const char* text) override;
+  void onDiscoveredContact(ContactInfo& contact, bool is_new,
+                           uint8_t path_len, const uint8_t* path) override;
 
 private:
-  // Returns true if the bot is allowed to act on / reply to this message.
   bool gate(const BotMsg& msg, const uint8_t rl_key[4]);
   bool channelAllowed(uint8_t channel_idx);
+  void handle(const BotMsg& msg, const uint8_t rl_key[4]);
 
   CommandRouter _router;
   RateLimiter _rl;
+  BotStore _store;
   unsigned long _boot_ms = 0;
-  uint32_t _msg_count = 0;
-  uint32_t _reply_count = 0;
 
-  // scratch buffer for splitting "<sender>: <body>" channel text
-  char _scratch[192];
+  char _scratch[192];   // splits "<sender>: <body>" for channel messages
 };

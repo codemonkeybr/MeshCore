@@ -8,25 +8,33 @@
 #include "commands/HelloCommand.h"
 #include "commands/Magic8Command.h"
 #include "commands/TestCommand.h"
+#include "commands/PathCommand.h"
+#include "commands/PrefixCommand.h"
+#include "commands/LeaderboardCommand.h"
+#include "commands/StatsCommand.h"
 #include "commands/CmdCommand.h"
 #include "commands/HelpCommand.h"
 
 // ---- Compile-time command table -------------------------------------------
-// Order is match priority (first match wins). help/cmd introspect the table, so
-// they see every command listed here.
-static PingCommand    s_ping;
-static VersionCommand s_version;
-static TestCommand    s_test;
-static HelloCommand   s_hello;
-static DiceCommand    s_dice;
-static RollCommand    s_roll;
-static Magic8Command  s_magic8;
-static CmdCommand     s_cmd;
-static HelpCommand    s_help;
+// Order is match priority (first match wins). help/cmd introspect the table.
+static PingCommand        s_ping;
+static VersionCommand     s_version;
+static TestCommand        s_test;
+static PathCommand        s_path;
+static PrefixCommand      s_prefix;
+static LeaderboardCommand s_leaderboard;
+static StatsCommand       s_stats;
+static HelloCommand       s_hello;
+static DiceCommand        s_dice;
+static RollCommand        s_roll;
+static Magic8Command      s_magic8;
+static CmdCommand         s_cmd;
+static HelpCommand        s_help;
 
 static Command* const kCommands[] = {
-  &s_ping, &s_version, &s_test, &s_hello,
-  &s_dice, &s_roll, &s_magic8,
+  &s_ping, &s_version, &s_test,
+  &s_path, &s_prefix, &s_leaderboard, &s_stats,
+  &s_hello, &s_dice, &s_roll, &s_magic8,
   &s_cmd, &s_help,
 };
 // --------------------------------------------------------------------------
