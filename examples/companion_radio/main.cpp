@@ -2,6 +2,12 @@
 #include <Mesh.h>
 #include "MyMesh.h"
 
+// A downstream example can define MESH_CLASS + MESH_CLASS_HEADER to run its own
+// MyMesh subclass as `the_mesh` while reusing this main.cpp unchanged.
+#ifdef MESH_CLASS_HEADER
+  #include MESH_CLASS_HEADER
+#endif
+
 // Believe it or not, this std C function is busted on some platforms!
 static uint32_t _atoi(const char* sp) {
   uint32_t n = 0;
@@ -95,7 +101,7 @@ MultiSerialInterface interface_manager;
 
 StdRNG fast_rng;
 SimpleMeshTables tables;
-MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
+MESH_CLASS the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
    #ifdef DISPLAY_CLASS
       , &ui_task
    #endif

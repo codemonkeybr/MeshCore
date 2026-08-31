@@ -258,4 +258,20 @@ private:
   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
 };
 
-extern MyMesh the_mesh;
+// MESH_CLASS lets a downstream example (e.g. companion_radio_bot) substitute a
+// MyMesh subclass for `the_mesh` without forking this file. Defaults to MyMesh.
+// MESH_CLASS_HEADER (if set) declares that subclass and is pulled in here, after
+// `class MyMesh` is complete, so every translation unit that uses `the_mesh`
+// sees the full type.
+#ifndef MESH_CLASS
+  #define MESH_CLASS MyMesh
+#endif
+#ifdef MESH_CLASS_HEADER
+  #include MESH_CLASS_HEADER   // no-op when MESH_CLASS_HEADER is including us back
+#endif
+
+// Forward declaration keeps this `extern` valid even when MESH_CLASS_HEADER is
+// mid-include (i.e. the subclass header is the translation unit's entry point);
+// TUs that dereference `the_mesh` pull in the full definition themselves.
+class MESH_CLASS;
+extern MESH_CLASS the_mesh;
