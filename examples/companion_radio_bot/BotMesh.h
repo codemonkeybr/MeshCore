@@ -5,6 +5,7 @@
 #include "RateLimiter.h"
 #include "BotStore.h"
 #include "BotMsg.h"
+#include "ReplyTarget.h"
 
 // BotMesh extends the stock companion-radio MyMesh with an on-device command
 // engine. It is substituted for `the_mesh` via -D MESH_CLASS=BotMesh /
@@ -26,6 +27,10 @@ public:
 
   // Queue `text` to be sent back to the origin of `msg` from the next loop().
   void botReply(const BotMsg& msg, const char* text);
+
+  // Reply routing for a (possibly deferred, e.g. HTTP) response.
+  ReplyTarget targetFor(const BotMsg& msg) const;
+  void enqueueReply(const ReplyTarget& t, const char* text);
 
   CommandRouter& router() { return _router; }
   BotStore& store() { return _store; }

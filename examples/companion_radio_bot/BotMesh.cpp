@@ -2,10 +2,10 @@
 #include "BotConfig.h"
 #include "BotDebug.h"
 #include "GeoUtil.h"
+#include "HttpWorker.h"
 #include "commands/Command.h"
 #include <string.h>
 #include <esp_system.h>
-#include <esp_task_wdt.h>
 
 #ifndef BOT_ENABLED
 #define BOT_ENABLED 1
@@ -17,11 +17,9 @@
 // Deferred reply queue — file-static so it does not sit inside the_mesh, and so
 // sends never happen from within the mesh RX callback.
 struct PendingReply {
-  bool     used = false;
-  bool     is_channel = false;
-  uint8_t  channel_idx = 0xFF;
-  uint8_t  to_pubkey[6] = {0};
-  char     text[BOT_MAX_REPLY_LEN + 1] = {0};
+  bool        used = false;
+  ReplyTarget target;
+  char        text[BOT_MAX_REPLY_LEN + 1] = {0};
 };
 static PendingReply s_outq[BOT_OUTQ_SIZE];
 static unsigned long s_last_tx_ms = 0;
@@ -33,7 +31,7 @@ static const char* reset_reason_str(esp_reset_reason_t r) {
     case ESP_RST_TASK_WDT: return "TASK_WDT";
     case ESP_RST_WDT:      return "WDT";
     case ESP_RST_BROWNOUT: return "BROWNOUT";
-    default:               return nullptr;   // POWERON / SW / etc. -> not noteworthy
+    default:               return nullptr;
   }
 }
 
@@ -49,6 +47,7 @@ void BotMesh::begin(bool has_display) {
   _router.begin();
   _rl.begin();
   _store.begin();
+  HttpWorker::instance().begin();
   for (auto& e : s_outq) e.used = false;
   BOT_DEBUG_PRINTLN("BotMesh ready as '%s' (%d cmds, %d cached nodes, reset=%d)",
                     getNodeName(), _router.count(), _store.count(), (int)s_reset);
@@ -62,25 +61,23 @@ const char* BotMesh::lastResetReason() { return reset_reason_str(s_reset); }
 void BotMesh::loop() {
   MyMesh::loop();
 #if BOT_ENABLED
-  // Once the mesh has settled, announce a recovery from a crash so it's visible
-  // on the mesh even without a serial console.
   if (!s_crash_announced && uptimeSecs() >= 15) {
     s_crash_announced = true;
     for (int i = 0; i < 40; i++) {
       ChannelDetails ch;
       if (getChannel(i, ch) && ch.name[0]) {
-        for (auto& e : s_outq) {
-          if (e.used) continue;
-          e.is_channel = true; e.channel_idx = (uint8_t)i;
-          snprintf(e.text, sizeof(e.text), "%s recovered (%s)", getNodeName(),
-                   reset_reason_str(s_reset));
-          e.used = true;
-          break;
-        }
+        ReplyTarget t; t.is_channel = true; t.channel_idx = (uint8_t)i;
+        char m[BOT_MAX_REPLY_LEN + 1];
+        snprintf(m, sizeof(m), "%s recovered (%s)", getNodeName(), reset_reason_str(s_reset));
+        enqueueReply(t, m);
         break;
       }
     }
   }
+
+  HttpResult hr;
+  while (HttpWorker::instance().pollResult(hr)) enqueueReply(hr.target, hr.text);
+
   drainOutQueue();
   _store.loop(nowEpoch());
 #endif
@@ -93,6 +90,7 @@ bool BotMesh::selfLocation(double& lat, double& lon) {
   if (p && (p->node_lat != 0.0 || p->node_lon != 0.0)) {
     lat = p->node_lat; lon = p->node_lon; return true;
   }
+  if (BOT_LAT != 0.0 || BOT_LON != 0.0) { lat = BOT_LAT; lon = BOT_LON; return true; }
   return false;
 }
 
@@ -228,15 +226,19 @@ void BotMesh::onMessageRecv(const ContactInfo& from, mesh::Packet* pkt,
 
 // ---- reply: queue now, send from loop() -------------------------------
 
-void BotMesh::botReply(const BotMsg& msg, const char* text) {
-  if (!text || !*text) return;
+ReplyTarget BotMesh::targetFor(const BotMsg& msg) const {
+  ReplyTarget t;
+  t.is_channel = msg.is_channel;
+  t.channel_idx = msg.channel_idx;
+  if (!msg.is_channel && msg.contact) memcpy(t.to_pubkey, msg.contact->id.pub_key, 6);
+  return t;
+}
 
+void BotMesh::enqueueReply(const ReplyTarget& t, const char* text) {
+  if (!text || !*text) return;
   for (auto& e : s_outq) {
     if (e.used) continue;
-    e.is_channel = msg.is_channel;
-    e.channel_idx = msg.channel_idx;
-    memset(e.to_pubkey, 0, sizeof(e.to_pubkey));
-    if (!msg.is_channel && msg.contact) memcpy(e.to_pubkey, msg.contact->id.pub_key, 6);
+    e.target = t;
     strncpy(e.text, text, BOT_MAX_REPLY_LEN);
     e.text[BOT_MAX_REPLY_LEN] = '\0';
     e.used = true;
@@ -244,6 +246,10 @@ void BotMesh::botReply(const BotMsg& msg, const char* text) {
   }
   stats.dropped_full++;
   BOT_DEBUG_PRINTLN("reply dropped (outq full): '%s'", text);
+}
+
+void BotMesh::botReply(const BotMsg& msg, const char* text) {
+  enqueueReply(targetFor(msg), text);
 }
 
 void BotMesh::drainOutQueue() {
@@ -254,14 +260,14 @@ void BotMesh::drainOutQueue() {
     if (!e.used) continue;
 
     bool sent = false;
-    if (e.is_channel) {
+    if (e.target.is_channel) {
       ChannelDetails ch;
-      if (getChannel(e.channel_idx, ch)) {
+      if (getChannel(e.target.channel_idx, ch)) {
         sent = sendGroupMessage(getRTCClock()->getCurrentTimeUnique(), ch.channel,
                                 getNodeName(), e.text, (int)strlen(e.text));
       }
     } else {
-      ContactInfo* c = lookupContactByPubKey(e.to_pubkey, 6);
+      ContactInfo* c = lookupContactByPubKey(e.target.to_pubkey, 6);
       if (c) {
         uint32_t ack = 0, tmo = 0;
         int r = sendMessage(*c, getRTCClock()->getCurrentTimeUnique(), 0, e.text, ack, tmo);
@@ -269,10 +275,12 @@ void BotMesh::drainOutQueue() {
       }
     }
 
-    if (sent) { stats.replies++; s_last_tx_ms = now; BOT_DEBUG_PRINTLN("tx (%s): '%s'", e.is_channel ? "ch" : "dm", e.text); }
-    else      { stats.send_fail++; BOT_DEBUG_PRINTLN("tx FAILED (%s): '%s'", e.is_channel ? "ch" : "dm", e.text); }
+    if (sent) { stats.replies++; s_last_tx_ms = now;
+                BOT_DEBUG_PRINTLN("tx (%s): '%s'", e.target.is_channel ? "ch" : "dm", e.text); }
+    else      { stats.send_fail++;
+                BOT_DEBUG_PRINTLN("tx FAILED (%s): '%s'", e.target.is_channel ? "ch" : "dm", e.text); }
 
     e.used = false;
-    return;   // one send per loop pass
+    return;
   }
 }

@@ -82,3 +82,26 @@
 #ifndef BOT_ANSWER_DM
 #define BOT_ANSWER_DM 1
 #endif
+
+// --- internet commands (HttpWorker) ----------------------------------
+#ifndef BOT_HTTP_INSECURE
+#define BOT_HTTP_INSECURE 1        // skip TLS cert validation (public read-only APIs)
+#endif
+#ifndef BOT_HTTP_TIMEOUT_MS
+#define BOT_HTTP_TIMEOUT_MS 9000
+#endif
+#ifndef BOT_HTTP_TASK_STACK
+#define BOT_HTTP_TASK_STACK 16384
+#endif
+#ifndef BOT_WX_METRIC
+#define BOT_WX_METRIC 1           // 1 = C/km/h, 0 = F/mph
+#endif
+
+// Compile-time fallback location (used by sun/moon/wx when the node prefs have
+// no location). Set via [bot_secrets].lat / .lon.
+#ifndef BOT_LAT
+#define BOT_LAT 0.0
+#endif
+#ifndef BOT_LON
+#define BOT_LON 0.0
+#endif

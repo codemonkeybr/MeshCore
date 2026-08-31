@@ -14,6 +14,12 @@
 #include "commands/StatsCommand.h"
 #include "commands/SunCommand.h"
 #include "commands/MoonCommand.h"
+#include "commands/WxCommand.h"
+#include "commands/AqiCommand.h"
+#include "commands/RainCommand.h"
+#include "commands/SolarCommand.h"
+#include "commands/JokeCommand.h"
+#include "commands/DadjokeCommand.h"
 #include "commands/CmdCommand.h"
 #include "commands/HelpCommand.h"
 
@@ -28,6 +34,12 @@ static LeaderboardCommand s_leaderboard;
 static StatsCommand       s_stats;
 static SunCommand         s_sun;
 static MoonCommand        s_moon;
+static WxCommand          s_wx;
+static AqiCommand         s_aqi;
+static RainCommand        s_rain;
+static SolarCommand       s_solar;
+static JokeCommand        s_joke;
+static DadjokeCommand     s_dadjoke;
 static HelloCommand       s_hello;
 static DiceCommand        s_dice;
 static RollCommand        s_roll;
@@ -39,6 +51,7 @@ static Command* const kCommands[] = {
   &s_ping, &s_version, &s_test,
   &s_path, &s_prefix, &s_leaderboard, &s_stats,
   &s_sun, &s_moon,
+  &s_wx, &s_aqi, &s_rain, &s_solar, &s_joke, &s_dadjoke,
   &s_hello, &s_dice, &s_roll, &s_magic8,
   &s_cmd, &s_help,
 };
