@@ -84,10 +84,17 @@ static int fetch_json(const char* url, JsonDocument& doc, bool accept_json = tru
 
   int code = http.GET();
   if (code == 200) {
+    int len = http.getSize();
+    if (len > 24000) { http.end(); BOT_DEBUG_PRINTLN("resp too big: %d", len); return -3; }
+    // getString() de-chunks (getStream() leaves chunk framing in the bytes).
+    String body = http.getString();
     DeserializationError err = filter
-        ? deserializeJson(doc, http.getStream(), DeserializationOption::Filter(*filter))
-        : deserializeJson(doc, http.getStream());
-    if (err) { BOT_DEBUG_PRINTLN("json err: %s", err.c_str()); code = -2; }
+        ? deserializeJson(doc, body, DeserializationOption::Filter(*filter))
+        : deserializeJson(doc, body);
+    if (err) {
+      BOT_DEBUG_PRINTLN("json err: %s (body %u b)", err.c_str(), (unsigned)body.length());
+      code = -2;
+    }
   }
   http.end();
   return code;
