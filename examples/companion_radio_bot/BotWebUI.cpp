@@ -30,9 +30,10 @@ static void status_json(String& j) {
   const char* rst = BotMesh::lastResetReason();
   uint32_t up = the_mesh.uptimeSecs();
 
-  j.reserve(600);
+  j.reserve(640);
   j = "{";
   j += "\"name\":\"" + String(the_mesh.getNodeName()) + "\",";
+  j += "\"version\":\"" BOT_VERSION " " __DATE__ " " __TIME__ "\",";
   j += "\"uptime_s\":" + String(up) + ",";
   j += "\"heap_free\":" + String(ESP.getFreeHeap()) + ",";
   j += "\"heap_min\":" + String(ESP.getMinFreeHeap()) + ",";
@@ -78,7 +79,8 @@ a{color:#3fbaa3}
 <p style=color:#7d8a85>auto-refresh 3s</p>
 </div>
 <script>
-const rows=[["uptime","uptime_s",v=>{let s=v|0,d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0;return `${d}d ${h}h ${m}m`}],
+const rows=[["version","version",v=>v],
+["uptime","uptime_s",v=>{let s=v|0,d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0;return `${d}d ${h}h ${m}m`}],
 ["free heap","heap_free",v=>(v/1024|0)+" k"],["min heap","heap_min",v=>(v/1024|0)+" k"],
 ["last reset","reset",v=>v],["wifi","wifi_rssi",v=>v+" dBm"],["ip","ip",v=>v],
 ["cached nodes","cache_nodes",v=>v],["lora","lora",v=>v],["location","loc",v=>v],
