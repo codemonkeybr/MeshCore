@@ -108,6 +108,16 @@ bool BotMesh::senderLocation(const BotMsg& msg, double& lat, double& lon) {
   return false;
 }
 
+// ---- raw RX (for RSSI) -----------------------------------------------
+
+void BotMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
+  MyMesh::logRxRaw(snr, rssi, raw, len);
+#if BOT_ENABLED
+  _last_rssi = rssi;
+  _last_snr = snr;
+#endif
+}
+
 // ---- advert capture ---------------------------------------------------
 
 void BotMesh::onDiscoveredContact(ContactInfo& contact, bool is_new,
@@ -191,6 +201,7 @@ void BotMesh::onChannelMessageRecv(const mesh::GroupChannel& channel, mesh::Pack
   m.channel = &channel;
   m.channel_idx = (uint8_t)findChannelIdx(channel);
   m.snr = pkt->getSNR();
+  m.rssi = _last_rssi;
   if (pkt->isRouteFlood()) {
     m.is_flood = true;
     m.path_hash_len = pkt->getPathHashSize();
@@ -215,6 +226,7 @@ void BotMesh::onMessageRecv(const ContactInfo& from, mesh::Packet* pkt,
   m.sender_timestamp = sender_timestamp;
   m.contact = &from;
   m.snr = pkt->getSNR();
+  m.rssi = _last_rssi;
   if (pkt->isRouteFlood()) {
     m.is_flood = true;
     m.path_hash_len = pkt->getPathHashSize();

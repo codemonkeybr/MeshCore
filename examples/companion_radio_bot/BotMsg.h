@@ -30,4 +30,5 @@ struct BotMsg {
   const uint8_t* path = nullptr;
 
   float snr = 0.0f;
+  float rssi = 0.0f;   // dBm, captured from the last raw RX (logRxRaw)
 };

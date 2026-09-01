@@ -38,6 +38,7 @@ public:
   uint32_t uptimeSecs() const { return (millis() - _boot_ms) / 1000; }
   uint32_t nowEpoch() { return getRTCClock()->getCurrentTime(); }
   static const char* lastResetReason();   // nullptr if a clean boot
+  float lastRssi() const { return _last_rssi; }
   bool selfLocation(double& lat, double& lon);
   bool senderLocation(const BotMsg& msg, double& lat, double& lon);
 
@@ -50,6 +51,7 @@ protected:
                      uint32_t sender_timestamp, const char* text) override;
   void onDiscoveredContact(ContactInfo& contact, bool is_new,
                            uint8_t path_len, const uint8_t* path) override;
+  void logRxRaw(float snr, float rssi, const uint8_t raw[], int len) override;
 
 private:
   bool gate(const BotMsg& msg, const uint8_t rl_key[4]);
@@ -61,6 +63,8 @@ private:
   RateLimiter _rl;
   BotStore _store;
   unsigned long _boot_ms = 0;
+  float _last_rssi = 0.0f;
+  float _last_snr = 0.0f;
 
   char _scratch[192];   // splits "<sender>: <body>" for channel messages
 };
