@@ -26,7 +26,7 @@
 #define BOT_MAX_REPLY_LEN 140    // single mesh text packet for now (Phase 2 chunks)
 #endif
 #ifndef BOT_MIN_TX_GAP_MS
-#define BOT_MIN_TX_GAP_MS 900    // absolute floor between two bot transmits
+#define BOT_MIN_TX_GAP_MS 2500   // absolute floor between two bot transmits (airtime courtesy)
 #endif
 
 // --- location cache (BotStore) ---------------------------------------
