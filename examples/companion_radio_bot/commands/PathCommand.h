@@ -32,11 +32,8 @@ public:
       path = msg.path;
       hops = msg.path_hops;
       hash_len = msg.path_hash_len;
-    } else if (msg.is_flood) {
-      mesh.botReply(msg, "reached me flood, 0 hops");
-      return;
     } else {
-      mesh.botReply(msg, "reached me direct (0 hops)");
+      mesh.botReply(msg, "\xF0\x9F\x93\xA1 Direct connection (0 hops)");
       return;
     }
 
