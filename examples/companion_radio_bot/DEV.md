@@ -38,6 +38,20 @@ its last frame ("Loading..."). So:
 
 - **Run** on external power (charger / power bank), *not* the PC.
 
+### OTA (once P5a is on the device)
+
+```
+BIN=.pio/build/heltec_v4_companion_radio_bot/firmware.bin
+curl -sS -H "Expect:" -m 180 -u admin:changeme \
+  -F "MD5=$(md5sum $BIN | cut -d' ' -f1)" -F "firmware=@$BIN" \
+  http://192.168.1.185/update
+# curl exits 56 ("connection reset") on success - ElegantOTA restart()s
+# before sending the final "OK". Verify via /api/status:
+curl -s -u admin:changeme http://192.168.1.185/api/status   # check "version" + fresh "uptime_s"
+```
+
+No clean-build needed for a .cpp-only change; still `pio run -t clean` after header edits.
+
 ## Observability
 
 - Over the mesh: the `stats` command (uptime, free heap, msg/reply/drop counters,
