@@ -7,7 +7,7 @@
 static const NodeRec* pickCandidate(const NodeRec* const* cands, int n,
                                     uint32_t now_epoch,
                                     bool have_prev, double prev_lat, double prev_lon,
-                                    bool* out_guessed) {
+                                    bool* out_guessed, float* out_score) {
   *out_guessed = (n > 1);
   const NodeRec* best = nullptr;
   float best_score = -1e9f;
@@ -29,6 +29,7 @@ static const NodeRec* pickCandidate(const NodeRec* const* cands, int n,
     float score = 0.45f * recency + 0.55f * geo;
     if (score > best_score) { best_score = score; best = c; }
   }
+  if (out_score) *out_score = best_score < 0.0f ? 0.0f : best_score;
   return best;
 }
 
@@ -66,8 +67,10 @@ void resolvePath(const uint8_t* path, uint8_t hash_len, uint8_t hops,
       continue;
     }
     bool guessed = false;
-    h.rep = pickCandidate(cands, n, now_epoch, have_prev, prev_lat, prev_lon, &guessed);
+    float score = 0.0f;
+    h.rep = pickCandidate(cands, n, now_epoch, have_prev, prev_lat, prev_lon, &guessed, &score);
     h.guessed = guessed;
+    h.score = score;
     if (guessed) guesses++;
 
     if (h.rep && h.rep->hasLoc()) {

@@ -13,6 +13,7 @@ struct PathHop {
   const NodeRec* rep = nullptr;  // resolved node, or null
   bool guessed = false;          // chosen among colliding candidates
   int  candidates = 0;
+  float score = 0.0f;            // winner's selection score (0..1), for the per-hop mark
 };
 
 struct PathInfo {
