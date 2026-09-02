@@ -38,6 +38,8 @@ static void status_json(String& j) {
   j += "\"heap_free\":" + String(ESP.getFreeHeap()) + ",";
   j += "\"heap_min\":" + String(ESP.getMinFreeHeap()) + ",";
   j += "\"reset\":\"" + String(rst ? rst : "clean") + "\",";
+  j += "\"clock\":" + String(the_mesh.nowEpoch()) + ",";
+  j += "\"clock_ntp\":" + String(BotMesh::clockSynced() ? "true" : "false") + ",";
   j += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
   j += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
   j += "\"cache_nodes\":" + String(the_mesh.store().count()) + ",";
@@ -82,7 +84,9 @@ a{color:#3fbaa3}
 const rows=[["version","version",v=>v],
 ["uptime","uptime_s",v=>{let s=v|0,d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0;return `${d}d ${h}h ${m}m`}],
 ["free heap","heap_free",v=>(v/1024|0)+" k"],["min heap","heap_min",v=>(v/1024|0)+" k"],
-["last reset","reset",v=>v],["wifi","wifi_rssi",v=>v+" dBm"],["ip","ip",v=>v],
+["last reset","reset",v=>v],
+["clock (UTC)","_clock",d=>new Date(d.clock*1000).toISOString().slice(0,19).replace("T"," ")+(d.clock_ntp?" (NTP)":" (no NTP)")],
+["wifi","wifi_rssi",v=>v+" dBm"],["ip","ip",v=>v],
 ["cached nodes","cache_nodes",v=>v],["lora","lora",v=>v],["location","loc",v=>v],
 ["msgs seen","msgs",v=>v],["matched","matched",v=>v],["replies sent","replies",v=>v],
 ["drop rate/gap/full","_drop",d=>`${d.drop_rate}/${d.drop_gap}/${d.drop_full}`],
@@ -92,7 +96,7 @@ async function tick(){
   let d=await (await fetch("/api/status")).json();
   document.getElementById("name").textContent=d.name;
   document.getElementById("t").innerHTML=rows.map(([k,f,fn])=>{
-   let v=f==="_drop"?fn(d):fn(d[f]);
+   let v=f[0]==="_"?fn(d):fn(d[f]);
    let cls=(f==="reset"&&d.reset!=="clean")||(f==="send_fail"&&d.send_fail>0)?" class=bad":"";
    return `<tr><td>${k}</td><td${cls}>${v}</td></tr>`}).join("");
  }catch(e){}

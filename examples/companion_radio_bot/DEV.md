@@ -58,6 +58,16 @@ No clean-build needed for a .cpp-only change; still `pio run -t clean` after hea
   cache size). This is the primary health signal while serial is impractical.
 - `BOT_DEBUG=1` prints to USB `Serial`, but see below.
 
+### Clock
+
+The bot syncs its RTC from NTP over WiFi (`configTime` in `BotMesh`, ESP-IDF SNTP,
+hourly auto-resync) — it does **not** depend on a connected companion app for time.
+After a cold boot it self-corrects within ~1 min of WiFi associating; until then
+`bootstrapRTCfromContacts()` supplies an approximate time. `/api/status` shows
+`clock` (epoch) and `clock_ntp` (bool). `sun`/`moon` accuracy tracks this clock.
+No hardware RTC on the board; a DS3231 on I2C would be auto-detected by
+`AutoDiscoverRTCClock` and kept synced by the same push.
+
 ### Serial monitor without halting the chip
 
 `ModemManager` probes new serial devices on plug-in and can grab / reset the S3.

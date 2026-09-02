@@ -38,6 +38,7 @@ public:
   uint32_t uptimeSecs() const { return (millis() - _boot_ms) / 1000; }
   uint32_t nowEpoch() { return getRTCClock()->getCurrentTime(); }
   static const char* lastResetReason();   // nullptr if a clean boot
+  static bool clockSynced();               // true once NTP has set the clock
   float lastRssi() const { return _last_rssi; }
   bool selfLocation(double& lat, double& lon);
   bool senderLocation(const BotMsg& msg, double& lat, double& lon);

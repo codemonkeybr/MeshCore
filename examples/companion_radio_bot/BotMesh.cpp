@@ -7,6 +7,7 @@
 #include "commands/Command.h"
 #include <WiFi.h>
 #include <string.h>
+#include <time.h>
 #include <esp_system.h>
 
 #ifndef BOT_ENABLED
@@ -39,6 +40,35 @@ static const char* reset_reason_str(esp_reset_reason_t r) {
 
 static esp_reset_reason_t s_reset = ESP_RST_UNKNOWN;
 static bool s_crash_announced = false;
+
+// NTP: the bot keeps its own clock over WiFi and never depends on a connected
+// companion app for the time. configTime() starts the ESP-IDF SNTP client
+// (which auto-resyncs hourly); we copy the synced epoch into the RTCClock so it
+// also reaches a hardware RTC if one is ever fitted.
+static bool s_ntp_started = false;
+static bool s_clock_synced = false;
+static unsigned long s_clock_push_ms = 0;
+static const time_t CLOCK_SANE_EPOCH = 1735689600;   // 2025-01-01 UTC
+
+static void syncClockFromNTP(mesh::RTCClock* rtc) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (!s_ntp_started) {
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov", "time.google.com");
+    s_ntp_started = true;
+  }
+  unsigned long now_ms = millis();
+  unsigned long interval = s_clock_synced ? 3600000UL : 5000UL;
+  if (s_clock_push_ms != 0 && (now_ms - s_clock_push_ms) < interval) return;
+  s_clock_push_ms = now_ms;
+
+  time_t t = time(nullptr);
+  if (t < CLOCK_SANE_EPOCH) return;          // SNTP hasn't answered yet
+  rtc->setCurrentTime((uint32_t)t);
+  if (!s_clock_synced) {
+    s_clock_synced = true;
+    BOT_DEBUG_PRINTLN("ntp: clock synced -> %lu", (unsigned long)t);
+  }
+}
 
 void BotMesh::begin(bool has_display) {
   MyMesh::begin(has_display);
@@ -75,6 +105,7 @@ void BotMesh::begin(bool has_display) {
 }
 
 const char* BotMesh::lastResetReason() { return reset_reason_str(s_reset); }
+bool BotMesh::clockSynced() { return s_clock_synced; }
 
 void BotMesh::loop() {
   MyMesh::loop();
@@ -94,6 +125,8 @@ void BotMesh::loop() {
   }
 
   if (!BotWebUI::started() && WiFi.status() == WL_CONNECTED) BotWebUI::begin();
+
+  syncClockFromNTP(getRTCClock());
 
   HttpResult hr;
   while (HttpWorker::instance().pollResult(hr)) enqueueReply(hr.target, hr.text);
