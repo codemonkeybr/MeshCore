@@ -20,7 +20,7 @@ public:
 
     char out[BOT_MAX_REPLY_LEN + 1];
     if (at <= 0.0f) { mesh.botReply(msg, "no path distances recorded yet"); return; }
-    snprintf(out, sizeof(out), "week: %.0f km (%s) | all-time: %.0f km (%s)",
+    snprintf(out, sizeof(out), "week: %.0f km (%s)\nall-time: %.0f km (%s)",
              wk, wkw[0] ? wkw : "?", at, atw[0] ? atw : "?");
     mesh.botReply(msg, out);
   }
