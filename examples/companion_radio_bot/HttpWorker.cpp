@@ -58,6 +58,23 @@ static const char* wmo_desc(int c) {
   }
 }
 
+// Emoji for a WMO weather code, matching the Python bot's condition emoji.
+static const char* wmo_emoji(int c) {
+  if (c < 0)                return "";
+  if (c == 0)               return "\xE2\x98\x80\xEF\xB8\x8F";          // sun
+  if (c == 1)               return "\xF0\x9F\x8C\xA4\xEF\xB8\x8F";      // sun behind small cloud
+  if (c == 2)               return "\xE2\x9B\x85";                      // sun behind cloud
+  if (c == 3)               return "\xE2\x98\x81\xEF\xB8\x8F";          // cloud
+  if (c == 45 || c == 48)   return "\xF0\x9F\x8C\xAB\xEF\xB8\x8F";      // fog
+  if (c >= 51 && c <= 57)   return "\xF0\x9F\x8C\xA6\xEF\xB8\x8F";      // sun behind rain cloud
+  if (c >= 61 && c <= 67)   return "\xF0\x9F\x8C\xA7\xEF\xB8\x8F";      // cloud with rain
+  if (c >= 71 && c <= 77)   return "\xE2\x9D\x84\xEF\xB8\x8F";          // snowflake
+  if (c >= 80 && c <= 82)   return "\xF0\x9F\x8C\xA6\xEF\xB8\x8F";      // sun behind rain cloud
+  if (c >= 85 && c <= 86)   return "\xF0\x9F\x8C\xA8\xEF\xB8\x8F";      // cloud with snow
+  if (c >= 95)              return "\xE2\x9B\x88\xEF\xB8\x8F";          // cloud with lightning + rain
+  return "";
+}
+
 static const char* compass(double deg) {
   static const char* d[] = {"N","NE","E","SE","S","SW","W","NW"};
   int i = (int)floor((fmod(deg, 360.0) + 22.5) / 45.0) & 7;
@@ -103,11 +120,11 @@ static int fetch_json(const char* url, JsonDocument& doc, bool accept_json = tru
 // ---- per-kind ---------------------------------------------------------
 
 static void do_wx(const HttpJob& j, char* out, size_t n) {
-  char url[240];
+  char url[280];
   snprintf(url, sizeof(url),
     "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
     "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
-    "wind_speed_10m,wind_direction_10m,precipitation"
+    "wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,dew_point_2m"
     "&temperature_unit=%s&wind_speed_unit=%s",
     j.lat, j.lon,
     BOT_WX_METRIC ? "celsius" : "fahrenheit",
@@ -124,10 +141,23 @@ static void do_wx(const HttpJob& j, char* out, size_t n) {
   int wc = c["weather_code"] | -1;
   double ws = c["wind_speed_10m"] | 0.0;
   double wd = c["wind_direction_10m"] | 0.0;
+  double gust = c["wind_gusts_10m"] | 0.0;
+  double dew = c["dew_point_2m"] | 0.0;
+  double press = c["surface_pressure"] | 0.0;
   const char* tu = BOT_WX_METRIC ? "C" : "F";
-  const char* su = BOT_WX_METRIC ? "km/h" : "mph";
-  snprintf(out, n, "%.0f%s (feels %.0f), %s, %d%% RH, wind %.0f %s %s",
-           t, tu, feels, wmo_desc(wc), rh, ws, su, compass(wd));
+
+  char desc[24];
+  strlcpy(desc, wmo_desc(wc), sizeof(desc));
+  if (desc[0] >= 'a' && desc[0] <= 'z') desc[0] -= 32;   // capitalise
+
+  // <emoji><desc> <t>°<U> feels <f>° <dir><spd> <rh>%RH 💧<dew>° [💨<gust>] 📊<p>hPa
+  size_t k = snprintf(out, n,
+    "%s%s %.0f\xC2\xB0%s feels %.0f\xC2\xB0 %s%.0f %d%%RH \xF0\x9F\x92\xA7%.0f\xC2\xB0",
+    wmo_emoji(wc), desc, t, tu, feels, compass(wd), ws, rh, dew);
+  if (gust > ws + 1.0 && k < n)
+    k += snprintf(out + k, n - k, " \xF0\x9F\x92\xA8%.0f", gust);
+  if (press > 0.0 && k < n)
+    snprintf(out + k, n - k, " \xF0\x9F\x93\x8A%.0fhPa", press);
 }
 
 static void do_aqi(const HttpJob& j, char* out, size_t n) {
