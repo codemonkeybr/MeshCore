@@ -5,7 +5,7 @@
 #include <string.h>
 
 #define CACHE_PATH "/botcache.bin"
-#define CACHE_MAGIC 0x42430003u    // "BC" v3
+#define CACHE_MAGIC 0x42430004u    // "BC" v4 (NodeRec::name 17 -> 32)
 
 // Record table — file-static so it does not bloat the `the_mesh` global.
 static NodeRec s_recs[BOT_LOCCACHE_MAX];

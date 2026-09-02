@@ -49,10 +49,26 @@ void BotMesh::begin(bool has_display) {
   _router.begin();
   _rl.begin();
   _store.begin();
+
+  // Seed the node cache from the companion contact table (persisted to /contacts3,
+  // reloaded in MyMesh::begin above). onDiscoveredContact only fires on live adverts,
+  // so without this the cache starts empty every boot until adverts trickle back in —
+  // and a NodeRec/cache-format change would silently lose the lot.
+  int seeded = 0;
+  ContactsIterator it = startContactsIterator();
+  ContactInfo ci;
+  while (it.hasNext(this, ci)) {
+    if (!ci.name[0]) continue;   // empty / anon slot (memset to 0)
+    bool has_loc = (ci.gps_lat != 0 || ci.gps_lon != 0);
+    _store.noteNode(ci.id.pub_key, ci.name, ci.type,
+                    ci.gps_lat, ci.gps_lon, has_loc, ci.last_advert_timestamp);
+    seeded++;
+  }
+
   HttpWorker::instance().begin();
   for (auto& e : s_outq) e.used = false;
-  BOT_DEBUG_PRINTLN("BotMesh ready as '%s' (%d cmds, %d cached nodes, reset=%d)",
-                    getNodeName(), _router.count(), _store.count(), (int)s_reset);
+  BOT_DEBUG_PRINTLN("BotMesh ready as '%s' (%d cmds, %d cached nodes [+%d seeded], reset=%d)",
+                    getNodeName(), _router.count(), _store.count(), seeded, (int)s_reset);
 #else
   BOT_DEBUG_PRINTLN("BotMesh compiled but BOT_ENABLED=0");
 #endif

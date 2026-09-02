@@ -9,7 +9,7 @@
 // independent of the 350-entry companion contact table and its eviction.
 struct NodeRec {
   uint8_t  pubkey[6];       // first 6 bytes of the public key (hop hash = pubkey[0])
-  char     name[17];
+  char     name[32];        // full advert name (MAX_ADVERT_DATA_SIZE)
   int32_t  lat_e6, lon_e6;  // 0,0 = unknown
   uint32_t last_advert;     // sender's clock
   uint8_t  type;            // ADV_TYPE_*
