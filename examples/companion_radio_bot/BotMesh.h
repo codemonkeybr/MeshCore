@@ -43,6 +43,12 @@ public:
   bool selfLocation(double& lat, double& lon);
   bool senderLocation(const BotMsg& msg, double& lat, double& lon);
 
+  // Best-known route from a DM contact to us, from their most recently heard
+  // advert (not necessarily the route this specific message took). `out_path`
+  // must be at least `max_path_bytes` bytes; false if there's nothing cached.
+  bool lastKnownPath(const BotMsg& msg, uint8_t* out_path, uint8_t max_path_bytes,
+                     uint8_t& hops, uint8_t& hash_len, uint32_t& age_secs);
+
   struct Stats { uint32_t msgs, matched, replies, dropped_rate, dropped_gap, dropped_full, send_fail; } stats{};
 
 protected:

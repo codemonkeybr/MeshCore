@@ -168,6 +168,36 @@ bool BotMesh::senderLocation(const BotMsg& msg, double& lat, double& lon) {
   return false;
 }
 
+// A ROUTE_TYPE_DIRECT packet's path is consumed hop-by-hop as it's forwarded,
+// so by the time it's delivered `path_hops` is always 0 - even after crossing
+// several repeaters. That's not the same as a genuine 0-hop reception. Fall
+// back to the route their last advert took to reach us (MyMesh's existing
+// recently-heard cache, refreshed on every advert) as the best available
+// estimate; `age_secs` tells the caller how stale it might be.
+bool BotMesh::lastKnownPath(const BotMsg& msg, uint8_t* out_path, uint8_t max_path_bytes,
+                            uint8_t& hops, uint8_t& hash_len, uint32_t& age_secs) {
+  if (msg.is_channel || !msg.contact) return false;
+
+  AdvertPath recent[ADVERT_PATH_TABLE_SIZE];
+  int n = getRecentlyHeard(recent, ADVERT_PATH_TABLE_SIZE);
+  for (int i = 0; i < n; i++) {
+    if (memcmp(recent[i].pubkey_prefix, msg.contact->id.pub_key,
+              sizeof(recent[i].pubkey_prefix)) != 0) continue;
+    if (!mesh::Packet::isValidPathLen(recent[i].path_len)) return false;
+
+    hash_len = (recent[i].path_len >> 6) + 1;
+    hops = recent[i].path_len & 63;
+    uint8_t bytes = hops * hash_len;
+    if (bytes > max_path_bytes) return false;   // shouldn't happen (MAX_PATH_SIZE-bound), but be safe
+
+    memcpy(out_path, recent[i].path, bytes);
+    uint32_t now = nowEpoch();
+    age_secs = now > recent[i].recv_timestamp ? now - recent[i].recv_timestamp : 0;
+    return true;
+  }
+  return false;
+}
+
 // ---- raw RX (for RSSI) -----------------------------------------------
 
 void BotMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {

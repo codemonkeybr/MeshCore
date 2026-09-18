@@ -16,6 +16,10 @@
 //   📏 ~<km> KM · SNR <n> dB  footer; km part omitted when it can't be computed,
 //                            SNR part omitted for a manual `path <hex>` decode
 // Direct (0-hop) replies collapse to "📡 Direct connection · SNR <n> dB".
+// A DM whose packet carries no path (ROUTE_TYPE_DIRECT consumes it hop-by-hop
+// in flight, even across several repeaters) falls back to the sender's last
+// advert path via BotMesh::lastKnownPath(); genuinely unknown cases say
+// "Routed · hop count unknown" instead of guessing "Direct".
 class PathCommand : public Command {
 public:
   const char* keyword() const override { return "path"; }
@@ -32,7 +36,10 @@ public:
     const uint8_t* path = nullptr;
 
     bool manual = false;   // path given as a hex argument => no live-packet SNR
+    bool cached = false;   // hop breakdown came from the advert-path cache, not this packet
+    uint32_t cache_age = 0;
     char arg[64];
+    uint8_t cbuf[64];      // MAX_PATH_SIZE
     if (args(msg, arg, sizeof(arg)) > 0) {
       manual = true;
       hops = parseHex(arg, buf, sizeof(buf));
@@ -43,11 +50,28 @@ public:
       hops = msg.path_hops;
       hash_len = msg.path_hash_len;
     } else {
-      char d[64];
-      snprintf(d, sizeof(d),
-               "\xF0\x9F\x93\xA1 Direct connection \xC2\xB7 SNR %.2f dB", msg.snr);
-      mesh.botReply(msg, d);
-      return;
+      // This packet carries no hop history: either it was genuinely a 0-hop
+      // flood receipt, or it arrived ROUTE_TYPE_DIRECT, whose path is consumed
+      // hop-by-hop in flight and is always empty on delivery - even after
+      // crossing several repeaters. Fall back to the sender's last advert path.
+      uint8_t chops = 0, chash_len = 1;
+      bool have_cache = !msg.is_flood &&
+        mesh.lastKnownPath(msg, cbuf, sizeof(cbuf), chops, chash_len, cache_age);
+
+      if (have_cache && chops > 0) {
+        path = cbuf; hops = chops; hash_len = chash_len; cached = true;
+      } else {
+        char d[72];
+        if (msg.is_flood || (have_cache && chops == 0)) {
+          snprintf(d, sizeof(d),
+                   "\xF0\x9F\x93\xA1 Direct connection \xC2\xB7 SNR %.2f dB", msg.snr);
+        } else {
+          snprintf(d, sizeof(d),
+                   "\xF0\x9F\x93\xA1 Routed \xC2\xB7 hop count unknown \xC2\xB7 SNR %.2f dB", msg.snr);
+        }
+        mesh.botReply(msg, d);
+        return;
+      }
     }
 
     double slat, slon, mlat, mlon;
@@ -78,9 +102,11 @@ public:
       }
     }
 
-    // Footer: "📏 ~<km> KM · SNR <snr> dB". The km part is dropped when the
-    // distance can't be computed; the SNR part is dropped for a manual decode.
-    char foot[48];
+    // Footer: "📏 ~<km> KM · SNR <snr> dB [· cached ~<age>]". The km part is
+    // dropped when the distance can't be computed; the SNR part is dropped for
+    // a manual decode; the cached note only appears when the hop breakdown
+    // came from the advert-path cache rather than this message's own packet.
+    char foot[72];
     size_t fk = 0;
     if (pi.have_distance)
       fk += snprintf(foot + fk, sizeof(foot) - fk,
@@ -89,12 +115,18 @@ public:
       if (fk) fk += snprintf(foot + fk, sizeof(foot) - fk, " \xC2\xB7 ");
       fk += snprintf(foot + fk, sizeof(foot) - fk, "SNR %.2f dB", msg.snr);
     }
+    if (cached) {
+      if (fk) fk += snprintf(foot + fk, sizeof(foot) - fk, " \xC2\xB7 ");
+      fk += snprintf(foot + fk, sizeof(foot) - fk, "cached ~%lum ago", (unsigned long)(cache_age / 60));
+    }
     if (fk && k < sizeof(out) - 2)
       k += snprintf(out + k, sizeof(out) - k, "\n%s", foot);
 
     mesh.botReply(msg, out);
 
-    if (pi.have_distance && pi.confidence != 'L') {
+    // Cached breakdowns are an approximation from an older advert, not this
+    // message's verified route - don't let them feed the distance leaderboard.
+    if (pi.have_distance && pi.confidence != 'L' && !cached) {
       mesh.store().recordDistance(msg.sender_name ? msg.sender_name : "?",
                                   pi.total_km, mesh.nowEpoch());
     }
