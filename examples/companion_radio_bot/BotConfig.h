@@ -47,19 +47,19 @@
 // A reply is sent only if the global, per-channel AND per-sender buckets all
 // have a token. Rates are tokens/second; capacity is the burst allowance.
 #ifndef BOT_RL_GLOBAL_PER_MIN
-#define BOT_RL_GLOBAL_PER_MIN  10      // sustained replies/min across everything
+#define BOT_RL_GLOBAL_PER_MIN  6       // sustained replies/min across everything
 #endif
 #ifndef BOT_RL_GLOBAL_BURST
 #define BOT_RL_GLOBAL_BURST    3
 #endif
 #ifndef BOT_RL_CHANNEL_PER_MIN
-#define BOT_RL_CHANNEL_PER_MIN 4       // per channel
+#define BOT_RL_CHANNEL_PER_MIN 3       // per channel
 #endif
 #ifndef BOT_RL_CHANNEL_BURST
 #define BOT_RL_CHANNEL_BURST   2
 #endif
 #ifndef BOT_RL_SENDER_PER_MIN
-#define BOT_RL_SENDER_PER_MIN  4       // per sender (pubkey for DM, name-hash for channel)
+#define BOT_RL_SENDER_PER_MIN  3       // per sender (pubkey for DM, name-hash for channel)
 #endif
 #ifndef BOT_RL_SENDER_BURST
 #define BOT_RL_SENDER_BURST    3
