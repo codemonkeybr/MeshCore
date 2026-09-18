@@ -124,7 +124,18 @@ void BotMesh::loop() {
     }
   }
 
-  if (!BotWebUI::started() && WiFi.status() == WL_CONNECTED) BotWebUI::begin();
+  if (WiFi.status() == WL_CONNECTED) {
+    static bool s_wifi_sleep_disabled = false;
+    if (!s_wifi_sleep_disabled) {
+      // Power-save naps between beacon intervals add multi-second latency to the
+      // first packet of a burst (ARP/TCP SYN), making the web UI/OTA feel flaky
+      // on a fresh connection. The bot stays mains-powered, so trade the idle
+      // current for responsiveness.
+      WiFi.setSleep(false);
+      s_wifi_sleep_disabled = true;
+    }
+    if (!BotWebUI::started()) BotWebUI::begin();
+  }
 
   syncClockFromNTP(getRTCClock());
 
