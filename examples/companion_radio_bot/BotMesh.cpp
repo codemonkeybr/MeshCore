@@ -27,6 +27,19 @@ struct PendingReply {
 static PendingReply s_outq[BOT_OUTQ_SIZE];
 static unsigned long s_last_tx_ms = 0;
 
+#if BOT_GREETER_ENABLED
+// Pending one-time welcome DMs, armed from onDiscoveredContact and fired from
+// loop() after BOT_GREETER_DELAY_MS. File-static for the same reason as
+// s_outq: kept out of the_mesh, drained outside the RX callback.
+struct PendingGreeting {
+  uint8_t       pubkey[6] = {0};
+  unsigned long fire_ms = 0;
+  bool          used = false;
+};
+static PendingGreeting s_greetings[BOT_GREETER_SLOTS];
+static unsigned long s_last_self_advert_ms = 0;
+#endif
+
 static const char* reset_reason_str(esp_reset_reason_t r) {
   switch (r) {
     case ESP_RST_PANIC:    return "PANIC";
@@ -139,6 +152,10 @@ void BotMesh::loop() {
 
   syncClockFromNTP(getRTCClock());
 
+#if BOT_GREETER_ENABLED
+  sendDueGreetings();
+#endif
+
   HttpResult hr;
   while (HttpWorker::instance().pollResult(hr)) enqueueReply(hr.target, hr.text);
 
@@ -218,8 +235,69 @@ void BotMesh::onDiscoveredContact(ContactInfo& contact, bool is_new,
   _store.noteNode(contact.id.pub_key, contact.name, contact.type,
                   contact.gps_lat, contact.gps_lon, has_loc,
                   contact.last_advert_timestamp);
+
+#if BOT_GREETER_ENABLED
+  // Only a person's phone/app, never a repeater/room/sensor discovered via
+  // the same advert traffic.
+  if (is_new && contact.type == ADV_TYPE_CHAT) {
+    unsigned long now = millis();
+    if (s_last_self_advert_ms == 0 ||
+        now - s_last_self_advert_ms >= BOT_GREETER_ADVERT_DEBOUNCE_MS) {
+      advert();   // zero-hop, so the new neighbour learns us right away
+      s_last_self_advert_ms = now;
+    }
+    armGreeting(contact.id.pub_key);
+  }
+#endif
 #endif
 }
+
+#if BOT_GREETER_ENABLED
+void BotMesh::armGreeting(const uint8_t pubkey[6]) {
+  int free_slot = -1;
+  for (int i = 0; i < BOT_GREETER_SLOTS; i++) {
+    if (s_greetings[i].used) {
+      if (memcmp(s_greetings[i].pubkey, pubkey, 6) == 0) return;   // already pending
+    } else if (free_slot < 0) {
+      free_slot = i;
+    }
+  }
+  if (free_slot < 0) return;   // all slots busy; skip rather than evict - rare, self-heals
+
+  memcpy(s_greetings[free_slot].pubkey, pubkey, 6);
+  s_greetings[free_slot].fire_ms = millis() + BOT_GREETER_DELAY_MS;
+  s_greetings[free_slot].used = true;
+}
+
+void BotMesh::sendDueGreetings() {
+  unsigned long now = millis();
+  for (int i = 0; i < BOT_GREETER_SLOTS; i++) {
+    PendingGreeting& g = s_greetings[i];
+    if (!g.used || now < g.fire_ms) continue;
+    g.used = false;
+
+    char out[BOT_MAX_REPLY_LEN + 1];
+    size_t k = snprintf(out, sizeof(out),
+                        "\xF0\x9F\x91\x8B Welcome to the mesh! Chat on: ");   // 👋
+
+    int shown = 0;
+    for (int c = 0; c < 40 && shown < BOT_GREETER_MAX_CHANNELS; c++) {
+      ChannelDetails ch;
+      if (!getChannel(c, ch) || !ch.name[0] || !channelAllowed((uint8_t)c)) continue;
+      k += snprintf(out + k, sizeof(out) - k, "%s#%s", shown ? ", " : "", ch.name);
+      shown++;
+    }
+    if (shown == 0) k += snprintf(out + k, sizeof(out) - k, "(DM only)");
+
+    snprintf(out + k, sizeof(out) - k,
+            ". Or DM me anytime \xE2\x80\x94 send 'cmd' for the command list.");
+
+    ReplyTarget t; t.is_channel = false;
+    memcpy(t.to_pubkey, g.pubkey, 6);
+    enqueueReply(t, out);
+  }
+}
+#endif
 
 // ---- gating ---------------------------------------------------------
 

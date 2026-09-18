@@ -65,6 +65,8 @@ private:
   bool channelAllowed(uint8_t channel_idx);
   void handle(const BotMsg& msg, const uint8_t rl_key[4]);
   void drainOutQueue();
+  void armGreeting(const uint8_t pubkey[6]);
+  void sendDueGreetings();
 
   CommandRouter _router;
   RateLimiter _rl;

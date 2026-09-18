@@ -83,6 +83,26 @@
 #define BOT_ANSWER_DM 1
 #endif
 
+// --- greeter -------------------------------------------------------------
+// On discovering a brand-new companion contact (ADV_TYPE_CHAT only - never
+// repeaters/rooms/sensors), advert back (zero-hop) then DM a one-time
+// welcome after a short delay.
+#ifndef BOT_GREETER_ENABLED
+#define BOT_GREETER_ENABLED       1
+#endif
+#ifndef BOT_GREETER_DELAY_MS
+#define BOT_GREETER_DELAY_MS      10000   // delay before the welcome DM
+#endif
+#ifndef BOT_GREETER_SLOTS
+#define BOT_GREETER_SLOTS         4       // greetings pending at once
+#endif
+#ifndef BOT_GREETER_MAX_CHANNELS
+#define BOT_GREETER_MAX_CHANNELS  4       // cap on channel names listed
+#endif
+#ifndef BOT_GREETER_ADVERT_DEBOUNCE_MS
+#define BOT_GREETER_ADVERT_DEBOUNCE_MS 20000   // skip advert() if we just sent one
+#endif
+
 // --- internet commands (HttpWorker) ----------------------------------
 #ifndef BOT_HTTP_INSECURE
 #define BOT_HTTP_INSECURE 1        // skip TLS cert validation (public read-only APIs)
