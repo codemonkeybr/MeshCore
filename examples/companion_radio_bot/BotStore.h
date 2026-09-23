@@ -35,6 +35,10 @@ public:
   const NodeRec* findByName(const char* name) const;
   int count() const;
 
+  // All used records, for the web UI's /api/nodes dump. Order is whatever the
+  // internal table happens to hold them in (insertion/LRU-reuse order).
+  int listAll(const NodeRec** out, int max_out) const;
+
   // --- leaderboard (NVS-backed) ---
   void recordDistance(const char* who, float km, uint32_t now_epoch);
   float weekBest(char* who_out, size_t who_sz) const;

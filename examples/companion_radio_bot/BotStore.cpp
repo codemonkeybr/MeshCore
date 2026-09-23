@@ -95,6 +95,14 @@ int BotStore::findByHash(const uint8_t* hash, uint8_t hash_len,
   return n;
 }
 
+int BotStore::listAll(const NodeRec** out, int max_out) const {
+  int n = 0;
+  for (int i = 0; i < s_count && n < max_out; i++) {
+    if (s_recs[i].used) out[n++] = &s_recs[i];
+  }
+  return n;
+}
+
 const NodeRec* BotStore::findByName(const char* name) const {
   if (!name || !*name) return nullptr;
   const NodeRec* best = nullptr;

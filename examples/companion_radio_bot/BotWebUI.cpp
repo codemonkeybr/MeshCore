@@ -2,6 +2,7 @@
 #include "BotMesh.h"
 #include "BotConfig.h"
 #include "BotDebug.h"
+#include "BotStore.h"
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncElegantOTA.h>
@@ -60,6 +61,43 @@ static void status_json(String& j) {
   j += "}";
 }
 
+// Full dump of the persistent node/repeater cache (BotStore), for debugging
+// name-resolution issues (e.g. two nodes sharing a 1-byte hop hash prefix) -
+// the same cache `path`/`prefix` resolve against, without needing a mesh
+// command relayed back by hand.
+static const char HEXD[] = "0123456789abcdef";
+
+static void nodes_json(String& j) {
+  static const NodeRec* recs[BOT_LOCCACHE_MAX];
+  int n = the_mesh.store().listAll(recs, BOT_LOCCACHE_MAX);
+
+  j.reserve((size_t)n * 96 + 16);
+  j = "[";
+  for (int i = 0; i < n; i++) {
+    const NodeRec* r = recs[i];
+    if (i) j += ",";
+    j += "{\"hash\":\"";
+    for (int b = 0; b < 6; b++) {
+      j += HEXD[(r->pubkey[b] >> 4) & 0xF];
+      j += HEXD[r->pubkey[b] & 0xF];
+    }
+    j += "\",\"name\":\"";
+    for (const char* p = r->name; *p; p++) {
+      if (*p == '"' || *p == '\\') j += '\\';
+      j += *p;
+    }
+    j += "\",\"type\":" + String(r->type);
+    j += ",\"has_loc\":" + String(r->hasLoc() ? "true" : "false");
+    if (r->hasLoc()) {
+      j += ",\"lat\":" + String(r->lat_e6 / 1e6, 6);
+      j += ",\"lon\":" + String(r->lon_e6 / 1e6, 6);
+    }
+    j += ",\"last_advert\":" + String(r->last_advert);
+    j += "}";
+  }
+  j += "]";
+}
+
 static const char PAGE[] = R"HTML(<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>D4rl3k</title>
@@ -115,6 +153,11 @@ void BotWebUI::begin() {
   s_server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* r) {
     if (!auth_ok(r)) return;
     String j; status_json(j);
+    r->send(200, "application/json", j);
+  });
+  s_server.on("/api/nodes", HTTP_GET, [](AsyncWebServerRequest* r) {
+    if (!auth_ok(r)) return;
+    String j; nodes_json(j);
     r->send(200, "application/json", j);
   });
 
