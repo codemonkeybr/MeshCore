@@ -59,6 +59,16 @@ void resolvePath(const uint8_t* path, uint8_t hash_len, uint8_t hops,
 
     const NodeRec* cands[8];
     int n = store.findByHash(h.hash, hash_len, cands, 8);
+
+    // A route hop is always a repeater (or room) retransmitting for someone
+    // else - a companion/chat node never relays others' traffic, so it can
+    // never legitimately BE a hop. Drop those before scoring, rather than
+    // let a companion outscore the real repeater on recency/geo alone.
+    int kept = 0;
+    for (int c = 0; c < n; c++) {
+      if (cands[c]->isRepeaterish()) cands[kept++] = cands[c];
+    }
+    n = kept;
     h.candidates = n;
 
     if (n == 0) {
